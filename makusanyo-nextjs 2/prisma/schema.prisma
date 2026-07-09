@@ -1,0 +1,107 @@
+// Prisma schema for Makusanyo — 941 Regt Unit Financial Management System
+// Run: npx prisma migrate dev --name init   (creates the DB schema)
+//      npx prisma db seed                    (loads demo data)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  co
+  upm
+  paysgt
+  cashier
+  pm
+  auditor
+  viewer
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  name      String
+  role      Role
+  password  String   @default("941") // demo only — hash in production
+  authKey   String   @default("941-KEY")
+  createdAt DateTime @default(now())
+
+  approvedApprovals Approval[] @relation("ApprovalApprover")
+  auditLogs         AuditLog[]
+}
+
+model Project {
+  code      String   @id
+  name      String
+  manager   String
+  monthly   Int      // TZS, current month's submitted profit
+  annual    Int      // TZS, running annual total
+  status    String   @default("Active")
+  createdAt DateTime @default(now())
+
+  expenses   Expense[]
+  approvals  Approval[]
+  collections MonthlyCollection[]
+}
+
+model MonthlyCollection {
+  id         String   @id @default(cuid())
+  project    Project  @relation(fields: [projectCode], references: [code])
+  projectCode String
+  month      String   // e.g. "July 2026"
+  amount     Int      // TZS
+  createdAt  DateTime @default(now())
+}
+
+model Approval {
+  id         Int      @id @default(autoincrement())
+  project    Project  @relation(fields: [projectCode], references: [code])
+  projectCode String
+  month      String
+  amount     Int
+  managerName String
+  submitted  DateTime @default(now())
+  stage      Int      @default(1) // 0=returned/draft, 1 UPM, 2 CO, 3 UPM final, 4 Pay Sgt, 5 transferred
+  returned   Boolean  @default(false)
+  approvedBy User?    @relation("ApprovalApprover", fields: [approvedById], references: [id])
+  approvedById String?
+  updatedAt  DateTime @updatedAt
+}
+
+model Expense {
+  no         String   @id
+  date       DateTime @default(now())
+  desc       String
+  category   String
+  amount     Int
+  project    Project? @relation(fields: [projectCode], references: [code])
+  projectCode String?
+  fundedFrom String   @default("Common Pool")
+  paidBy     String?
+  createdAt  DateTime @default(now())
+}
+
+model PoolTransaction {
+  id        String   @id @default(cuid())
+  ref       String   @unique
+  date      DateTime @default(now())
+  desc      String
+  type      String   // "in" | "out"
+  amount    Int
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  ts        DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  category  String
+  action    String
+  detail    String?
+}
